@@ -1,5 +1,11 @@
-import cv2
+# MediaPipe - Copyright 2019 The MediaPipe Authors (Apache License 2.0)
+# https://github.com/google-ai-edge/mediapipe/blob/master/LICENSE
+
 import os
+os.environ['GLOG_minloglevel'] = '3'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
+import cv2
 import numpy as np
 import mediapipe as mp
 from mediapipe.tasks import python as mp_python
