@@ -55,6 +55,26 @@ def hand_near_face(hand_results, face_region, frame_shape, margin_ratio=0.6):
     return False
 
 
+def cleanup_old_faces(days=7):
+    cutoff = datetime.now().timestamp() - days * 86400
+    removed = 0
+    for filename in os.listdir(SAVE_DIR):
+        if not filename.lower().endswith('.jpg'):
+            continue
+        try:
+            base = filename[len('face_'):-len('.jpg')]
+            parts = base.rsplit('_', 2)
+            ts = datetime.strptime(f"{parts[-2]}_{parts[-1]}", '%Y%m%d_%H%M%S').timestamp()
+            if ts < cutoff:
+                os.remove(os.path.join(SAVE_DIR, filename))
+                print(f"파기 완료 (7일 경과): {filename}")
+                removed += 1
+        except (ValueError, IndexError):
+            pass
+    if removed:
+        print(f"총 {removed}개 파일 파기됨")
+
+
 def load_training_data():
     faces, labels, label_map = [], [], {}
     current_label = 0
@@ -94,6 +114,7 @@ if not cap.isOpened():
     print("웹캠을 열 수 없습니다.")
     exit()
 
+cleanup_old_faces()
 recognizer, label_map = load_training_data()
 if recognizer:
     print(f"등록된 고객: {list(label_map.values())}")
@@ -113,6 +134,7 @@ occlusion_frame_count = 0
 occlusion_active = False
 occlusion_start_time = None
 person_gone_count = 0
+last_cleanup_hour = datetime.now().hour
 
 
 def put_text_centered(img, text, y, font, scale, color, thickness):
@@ -125,6 +147,12 @@ while True:
     ret, frame = cap.read()
     if not ret:
         break
+
+    current_hour = datetime.now().hour
+    if current_hour != last_cleanup_hour:
+        cleanup_old_faces()
+        recognizer, label_map = load_training_data()
+        last_cleanup_hour = current_hour
 
     display = frame.copy()
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -256,12 +284,19 @@ while True:
         cv2.addWeighted(dark, 0.5, overlay, 0.5, 0, overlay)
 
         font = cv2.FONT_HERSHEY_SIMPLEX
-        put_text_centered(overlay, 'Saving the Face.',
-                          h_frame // 2 - 50, font, 0.9, (255, 255, 255), 2)
-        put_text_centered(overlay, 'Do you agree to save the face for the service?',
-                          h_frame // 2, font, 0.7, (255, 255, 255), 2)
-        put_text_centered(overlay, "'y' accept  /  'n' decline",
-                          h_frame // 2 + 55, font, 0.9, (0, 255, 255), 2)
+        lines = [
+            ('[Personal Information Collection Notice]', 0.6, (0, 255, 255)),
+            ('Collector: PA', 0.5, (200, 200, 200)),
+            ('Purpose: Customer service', 0.5, (200, 200, 200)),
+            ('Items: Photo, Name, Order history', 0.5, (200, 200, 200)),
+            ('Retention: 7 days, then deleted', 0.5, (200, 200, 200)),
+            ('Third-party sharing: None', 0.5, (200, 200, 200)),
+            ('Refusal: No disadvantage', 0.5, (200, 200, 200)),
+            ('Do you agree?  [y] Yes   [n] No', 0.65, (255, 255, 255)),
+        ]
+        start_y = h_frame // 2 - 130
+        for i, (text, scale, color) in enumerate(lines):
+            put_text_centered(overlay, text, start_y + i * 38, font, scale, color, 1)
 
         cv2.imshow('Face Detection', overlay)
         key = cv2.waitKey(0) & 0xFF
